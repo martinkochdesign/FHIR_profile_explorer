@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FHIR Profile Explorer</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+<style>
+  :root {
+    --bg: #f5f6fa; --panel-bg: #ffffff; --border: #e0e3eb;
+    --text: #1a1a2e; --text-muted: #6b7280;
+    --primary: #4f46e5; --primary-light: #e0e7ff;
+    --accent-obj: #4f46e5; --accent-str: #059669; --accent-num: #d97706;
+    --accent-bool: #dc2626; --accent-arr: #7c3aed; --accent-ref: #0891b2;
+    --accent-enum: #be185d; --accent-backbone: #9333ea; --accent-ext: #ea580c;
+    --required-dot: #ef4444; --must-support: #16a34a;
+    --hover-bg: #f0f1f5; --tree-line: #d1d5db;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08); --radius: 8px;
+    --binding-required: #dc2626; --binding-extensible: #d97706;
+    --binding-preferred: #2563eb; --binding-example: #6b7280;
+    --diff-bg: #fefce8; --diff-border: #facc15;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    background: var(--panel-bg); border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: center; gap: 16px;
+    flex-shrink: 0; box-shadow: var(--shadow); z-index: 100;
+  }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+  header h1 span { color: var(--text); font-weight: 400; }
+  .header-controls { display: flex; align-items: center; gap: 12px; flex: 1; flex-wrap: wrap; }
+  .search-wrapper { position: relative; flex: 1; max-width: 460px; min-width: 200px; }
+  .search-wrapper input {
+    width: 100%; padding: 8px 12px 8px 36px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: 14px; outline: none; transition: border-color .15s;
+  }
+  .search-wrapper input:focus { border-color: var(--primary); }
+  .search-wrapper .search-icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 16px; pointer-events: none;
+  }
+  .search-wrapper .clear-btn {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; display: none;
+  }
+  .search-wrapper .clear-btn.visible { display: block; }
+  .dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; background: var(--panel-bg);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    max-height: 420px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 200; display: none;
+  }
+  .dropdown.open { display: block; }
+  .dropdown-group-label {
+    padding: 6px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--text-muted); background: var(--bg); position: sticky; top: 0;
+  }
+  .dropdown-item { padding: 8px 12px; cursor: pointer; font-size: 14px; transition: background .1s; }
+  .dropdown-item:hover, .dropdown-item.active { background: var(--primary-light); color: var(--primary); }
+  .dropdown-item .item-desc {
+    display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dropdown-item .item-url {
+    display: block; font-size: 10px; color: var(--accent-ref); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace;
+  }
+  .hdr-btn {
+    padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 13px; cursor: pointer; white-space: nowrap; transition: all .15s;
+  }
+  .hdr-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .hdr-btn.primary:hover { opacity: .9; }
+  .hdr-btn.secondary { background: var(--bg); color: var(--text-muted); }
+  .hdr-btn.secondary:hover { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+  .status-msg { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+  .pkg-badge {
+    display: inline-block; background: var(--primary-light); color: var(--primary);
+    font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+  }
+  .main { display: flex; flex: 1; overflow: hidden; position: relative; }
+  .tree-panel { flex: 1; overflow: auto; padding: 16px 24px; }
+  .tree-empty {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; color: var(--text-muted); font-size: 15px; text-align: center; line-height: 1.6;
+  }
+  .tree-empty .instructions { max-width: 600px; }
+  .tree-empty .instructions h2 { font-size: 16px; color: var(--text); margin: 16px 0 8px; }
+  .tree-empty .instructions code {
+    background: var(--panel-bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; border: 1px solid var(--border);
+  }
+  .tree-node { position: relative; }
+  .tree-children { margin-left: 20px; padding-left: 16px; border-left: 1px solid var(--tree-line); }
+  .node-row {
+    display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px;
+    cursor: pointer; user-select: none; transition: background .1s; position: relative;
+  }
+  .node-row:hover { background: var(--hover-bg); }
+  .node-row.selected { background: var(--primary-light); }
+  .node-row.diff-highlight { background: var(--diff-bg); border-left: 3px solid var(--diff-border); }
+  .node-row.diff-highlight:hover { background: #fef9c3; }
+  .node-row.diff-highlight.selected { background: #fef08a; }
+  .toggle-icon {
+    width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--text-muted); flex-shrink: 0; transition: transform .15s;
+  }
+  .toggle-icon.expanded { transform: rotate(90deg); }
+  .toggle-icon.leaf { visibility: hidden; }
+  .required-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--required-dot); flex-shrink: 0; }
+  .ms-flag {
+    font-size: 10px; font-weight: 700; color: var(--must-support);
+    background: #dcfce7; padding: 0 4px; border-radius: 3px; flex-shrink: 0;
+  }
+  .type-badge {
+    font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+    color: #fff; flex-shrink: 0; line-height: 1.4;
+  }
+  .type-badge.obj { background: var(--accent-obj); }
+  .type-badge.str { background: var(--accent-str); }
+  .type-badge.num { background: var(--accent-num); }
+  .type-badge.bool { background: var(--accent-bool); }
+  .type-badge.arr { background: var(--accent-arr); }
+  .type-badge.ref { background: var(--accent-ref); }
+  .type-badge.enum { background: var(--accent-enum); }
+  .type-badge.backbone { background: var(--accent-backbone); }
+  .type-badge.ext { background: var(--accent-ext); }
+  .node-name { font-size: 14px; font-weight: 500; }
+  .node-type-label { font-size: 12px; color: var(--text-muted); }
+  .node-cardinality { font-size: 11px; color: var(--text-muted); background: var(--bg); padding: 0 4px; border-radius: 3px; }
+  .node-short {
+    font-size: 12px; color: var(--text-muted); margin-left: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;
+  }
+  .node-binding-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
+  .node-actions { margin-left: auto; display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
+  .node-row:hover .node-actions { opacity: 1; }
+  .node-actions button {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 2px 6px; font-size: 12px; cursor: pointer; color: var(--text-muted); transition: all .1s;
+  }
+  .node-actions button:hover { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+  .detail-panel {
+    width: 420px; background: var(--panel-bg); border-left: 1px solid var(--border);
+    overflow-y: auto; flex-shrink: 0; display: none; flex-direction: column;
+  }
+  .detail-panel.open { display: flex; }
+  .detail-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--panel-bg); z-index: 10;
+  }
+  .detail-header h3 { font-size: 15px; font-weight: 600; }
+  .detail-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); line-height: 1; }
+  .detail-body { padding: 16px; }
+  .detail-section { margin-bottom: 16px; }
+  .detail-section label {
+    display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .detail-section .value { font-size: 14px; line-height: 1.5; word-break: break-word; }
+  .path-copy-row { display: flex; align-items: center; gap: 8px; }
+  .path-copy-row code {
+    flex: 1; background: var(--bg); padding: 6px 10px; border-radius: 4px;
+    font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; word-break: break-all;
+  }
+  .path-copy-row button {
+    background: var(--primary); color: #fff; border: none; border-radius: 4px;
+    padding: 6px 10px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .path-copy-row button:hover { opacity: .9; }
+  .binding-badge {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 4px; color: #fff; margin-right: 6px;
+  }
+  .binding-badge.required { background: var(--binding-required); }
+  .binding-badge.extensible { background: var(--binding-extensible); }
+  .binding-badge.preferred { background: var(--binding-preferred); }
+  .binding-badge.example { background: var(--binding-example); }
+  .detail-link { color: var(--primary); text-decoration: none; cursor: pointer; }
+  .detail-link:hover { text-decoration: underline; }
+  .type-list { margin-top: 4px; }
+  .type-list .type-entry { font-size: 13px; padding: 3px 0; border-bottom: 1px solid var(--bg); }
+  .type-list .type-entry:last-child { border-bottom: none; }
+  .type-list .type-code { font-weight: 600; color: var(--primary); cursor: pointer; text-decoration: none; border-bottom: 1px dashed var(--primary); }
+  .type-list .type-code:hover { opacity: .8; }
+  .type-list .type-code.primitive { color: var(--text-muted); cursor: default; border-bottom: none; }
+  .type-list .type-profiles { font-size: 12px; color: var(--text-muted); margin-left: 8px; }
+  .constraint-list { margin-top: 4px; }
+  .constraint-item { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--bg); }
+  .constraint-item:last-child { border-bottom: none; }
+  .constraint-key { font-weight: 600; color: var(--accent-obj); margin-right: 6px; }
+  .constraint-severity { font-size: 11px; padding: 1px 5px; border-radius: 3px; margin-right: 6px; color: #fff; }
+  .constraint-severity.error { background: var(--binding-required); }
+  .constraint-severity.warning { background: var(--binding-extensible); }
+  .enum-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .enum-list span { background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+  .diff-tag {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px;
+    border-radius: 3px; background: var(--diff-border); color: #713f12; margin-left: 6px;
+  }
+  .slice-tag {
+    display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px;
+    border-radius: 3px; background: #dbeafe; color: #1e40af; margin-left: 4px;
+  }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #1a1a2e; color: #fff; padding: 8px 20px; border-radius: 6px;
+    font-size: 14px; opacity: 0; transition: all .3s; z-index: 999; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .loading-overlay {
+    position: absolute; inset: 0; background: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; z-index: 50;
+  }
+  .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; }
+  .loading-text { font-size: 14px; color: var(--text-muted); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 500; animation: fadeIn .15s;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--panel-bg); border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    width: 700px; max-width: 90vw; max-height: 80vh;
+    display: flex; flex-direction: column; animation: slideUp .2s;
+  }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .modal-header h2 { font-size: 16px; font-weight: 700; }
+  .modal-header .modal-subtitle { font-size: 13px; color: var(--text-muted); margin-left: 8px; }
+  .modal-header-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1; }
+  .modal-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .vs-concept-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .vs-concept-table th { text-align: left; padding: 6px 10px; background: var(--bg); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
+  .vs-concept-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .vs-concept-table tr:hover td { background: var(--hover-bg); }
+  .vs-concept-code { font-family: monospace; font-weight: 600; color: var(--primary); }
+  /* Package info bar */
+  .pkg-info-bar {
+    background: var(--panel-bg); border-bottom: 1px solid var(--border);
+    padding: 8px 24px; font-size: 13px; color: var(--text-muted);
+    display: none; flex-shrink: 0; gap: 16px; align-items: center; flex-wrap: wrap;
+  }
+  .pkg-info-bar.visible { display: flex; }
+  .pkg-info-bar strong { color: var(--text); }
+  .pkg-info-bar .pkg-stat {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--bg); padding: 2px 8px; border-radius: 4px;
+  }
+    /* Example modal extras */
+  .example-tabs {
+    display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border);
+    overflow-x: auto; flex-shrink: 0;
+  }
+  .example-tab {
+    padding: 8px 14px; font-size: 13px; cursor: pointer; border: none;
+    background: none; color: var(--text-muted); border-bottom: 2px solid transparent;
+    white-space: nowrap; transition: all .15s;
+  }
+  .example-tab:hover { color: var(--text); }
+  .example-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .example-json {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px; line-height: 1.6; white-space: pre-wrap;
+    word-break: break-word; padding: 20px; overflow-y: auto; flex: 1;
+    background: #fafbfc;
+  }
+  .example-json .json-key { color: #0550ae; }
+  .example-json .json-string { color: #0a3069; }
+  .example-json .json-number { color: #0550ae; font-weight: 600; }
+  .example-json .json-bool { color: #cf222e; font-weight: 600; }
+  .example-json .json-null { color: #6e7781; font-style: italic; }
+  .example-json .json-bracket { color: #1f2328; }
+  .example-toolbar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 20px;
+    border-bottom: 1px solid var(--border); background: var(--bg); flex-shrink: 0;
+  }
+  .example-toolbar .example-info { font-size: 12px; color: var(--text-muted); flex: 1; }
+  .example-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 4px; background: #dbeafe; color: #1e40af; cursor: pointer;
+    border: none; transition: all .15s;
+  }
+  .example-badge:hover { background: #bfdbfe; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔥 FHIR <span>Profile Explorer</span></h1>
+  <div class="header-controls">
+    <div class="search-wrapper">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Load a package to begin…" autocomplete="off" disabled>
+      <button class="clear-btn" id="clear-btn">✕</button>
+      <div class="dropdown" id="dropdown"></div>
+    </div>
+    <button class="hdr-btn primary" id="load-base-btn">📥 Load FHIR base</button>
+    <button class="hdr-btn primary" id="load-pkg-btn" style="display:none;">📦 Load profile package</button>
+    <button class="hdr-btn secondary" id="clear-btn-hdr" style="display:none;">🗑️ Reset</button>
+    <input type="file" id="base-input" accept=".zip" style="display:none;">
+    <input type="file" id="pkg-input" accept=".zip,.tgz,.tar.gz" style="display:none;">
+    <span class="status-msg" id="status-msg"></span>
+  </div>
+</header>
+
+<div class="pkg-info-bar" id="pkg-info-bar"></div>
+
+<div class="main" id="main-area">
+  <div class="tree-panel" id="tree-panel">
+    <div class="tree-empty" id="tree-empty">
+      <div class="instructions" id="instructions">
+           <div style="font-size:48px;margin-bottom:12px;">📦</div>
+        <div><strong>Load FHIR base + profile package</strong></div>
+        <div style="margin-top:12px;font-size:13px;">
+          <strong>Step 1:</strong> Load the base FHIR definitions (<code>definitions.json.zip</code>)<br>
+          <strong>Step 2:</strong> Load your Simplifier profile package (<code>.zip</code> or <code>.tgz</code>)
+        </div>
+        <h2>Base definition downloads</h2>
+        <div class="dl-links">
+          <a href="https://hl7.org/fhir/R4/definitions.json.zip" target="_blank">⬇ R4 (4.0.1)</a><br>
+          <a href="https://hl7.org/fhir/R4B/definitions.json.zip" target="_blank">⬇ R4B (4.3.0)</a><br>
+          <a href="https://hl7.org/fhir/R5/definitions.json.zip" target="_blank">⬇ R5 (5.0.0)</a>
+        </div>
+        <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">
+          The base definitions provide the full resource structure.<br>
+          Your Simplifier profiles are then overlaid on top.
+        </div>
+      </div>
+    </div>
+    <div id="tree-root" style="display:none;"></div>
+  </div>
+
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-header">
+      <h3 id="detail-title">Details</h3>
+      <button class="detail-close" id="detail-close">×</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- JSZip for .zip files -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous"></script>
+<!-- pako for .tgz gzip decompression -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js" integrity="sha512-g2TeAWw5GPnX7z0Kn8nFbYfeHcvAu/tx6d6A2HtiamPcFG4MhttuvOorsJoEW3CZZvHCjdFQ40IG3YPSNmjQA==" crossorigin="anonymous"></script>
+
+
+<script>
+(() => {
+  const PRIMITIVES = new Set([
+    'boolean','integer','integer64','string','decimal','uri','url','canonical',
+    'base64Binary','instant','date','dateTime','time','code','oid','id','uuid',
+    'markdown','unsignedInt','positiveInt','xhtml',
+  ]);
+  function isComplexType(code) {
+    if (!code) return false;
+    if (PRIMITIVES.has(code)) return false;
+    if (['Resource','DomainResource','Element','BackboneElement'].includes(code)) return false;
+    return true;
+  }
+
+  function parseTar(buffer) {
+    const files = {};
+    const view = new Uint8Array(buffer);
+    let offset = 0;
+    const decoder = new TextDecoder();
+    while (offset < view.length - 512) {
+      const header = view.slice(offset, offset + 512);
+      if (header.every(b => b === 0)) break;
+      let name = decoder.decode(header.slice(0, 100)).replace(/\0+$/, '');
+      const prefix = decoder.decode(header.slice(345, 500)).replace(/\0+$/, '');
+      if (prefix) name = prefix + '/' + name;
+      const sizeStr = decoder.decode(header.slice(124, 136)).replace(/\0+$/, '').trim();
+      const size = parseInt(sizeStr, 8) || 0;
+      const type = header[156];
+      offset += 512;
+      if ((type === 48 || type === 0) && size > 0) {
+        files[name] = decoder.decode(view.slice(offset, offset + size));
+      }
+      offset += Math.ceil(size / 512) * 512;
+    }
+    return files;
+  }
+
+  // ═══════════════════════════════════════════
+  //  STATE
+  // ═══════════════════════════════════════════
+  let baseDefinitions = {};
+  let baseLoaded = false;
+  let pkgMeta = null;
+  let allResources = {};
+  let categories = {};
+  let profileIndex = {};
+  let valueSets = {};
+  let codeSystems = {};
+  let examples = {};       // { resourceType: [ { name, resource } ] }
+  let profileExamples = {}; // { profileUrl: [ { name, resource } ] }
+  let selectedNode = null;
+
+  // ═══════════════════════════════════════════
+  //  DOM REFS
+  // ═══════════════════════════════════════════
+  const $ = id => document.getElementById(id);
+  const searchInput = $('search-input');
+  const clearBtn = $('clear-btn');
+  const dropdown = $('dropdown');
+  const statusMsg = $('status-msg');
+  const treeEmpty = $('tree-empty');
+  const treeRoot = $('tree-root');
+  const detailPanel = $('detail-panel');
+  const detailTitle = $('detail-title');
+  const detailBody = $('detail-body');
+  const detailCloseEl = $('detail-close');
+  const toastEl = $('toast');
+  const mainArea = $('main-area');
+  const loadBaseBtn = $('load-base-btn');
+  const loadPkgBtn = $('load-pkg-btn');
+  const clearBtnHdr = $('clear-btn-hdr');
+  const baseInput = $('base-input');
+  const pkgInput = $('pkg-input');
+  const instructions = $('instructions');
+  const pkgInfoBar = $('pkg-info-bar');
+
+  // ═══════════════════════════════════════════
+  //  BASE DEFINITIONS LOADING
+  // ═══════════════════════════════════════════
+  loadBaseBtn.addEventListener('click', () => baseInput.click());
+
+  baseInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const overlay = showOverlay('Loading base definitions…');
+    try {
+      const zip = await JSZip.loadAsync(file);
+      let resourceBundle = null, typesBundle = null;
+      for (const [fn, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        const fnl = fn.toLowerCase();
+        if (fnl.includes('profiles-resources') && fnl.endsWith('.json')) {
+          overlay.querySelector('.loading-text').textContent = 'Parsing resource profiles…';
+          resourceBundle = JSON.parse(await entry.async('string'));
+        } else if (fnl.includes('profiles-types') && fnl.endsWith('.json')) {
+          overlay.querySelector('.loading-text').textContent = 'Parsing type profiles…';
+          typesBundle = JSON.parse(await entry.async('string'));
+        }
+      }
+      if (!resourceBundle && !typesBundle) throw new Error('No profiles-resources.json or profiles-types.json found.');
+      overlay.querySelector('.loading-text').textContent = 'Building base index…';
+      const entries = [...(resourceBundle?.entry || []), ...(typesBundle?.entry || [])];
+      let count = 0;
+      for (const entry of entries) {
+        const res = entry.resource;
+        if (!res || res.resourceType !== 'StructureDefinition') continue;
+        const name = res.name || res.id;
+        if (!name) continue;
+        const elements = res.snapshot?.element || [];
+        if (!elements.length) continue;
+        const elementsByPath = {};
+        for (const el of elements) { if (el.path) elementsByPath[el.path] = el; }
+        baseDefinitions[name] = { sd: res, elements, elementsByPath };
+        if (res.url) baseDefinitions[res.url] = baseDefinitions[name];
+        if (res.type) baseDefinitions[res.type] = baseDefinitions[name];
+        count++;
+      }
+      baseLoaded = true;
+      overlay.remove();
+      loadBaseBtn.textContent = `✅ Base loaded (${count} definitions)`;
+      loadBaseBtn.classList.remove('primary');
+      loadBaseBtn.classList.add('secondary');
+      loadPkgBtn.style.display = 'inline-block';
+      statusMsg.textContent = 'Now load your Simplifier package →';
+      showToast(`Base definitions loaded — ${count} definitions ✓`);
+    } catch (err) {
+      overlay.remove();
+      statusMsg.textContent = `Error: ${err.message}`;
+      console.error(err);
+    }
+    baseInput.value = '';
+  });
+
+  // ═══════════════════════════════════════════
+  //  SNAPSHOT GENERATION
+  // ═══════════════════════════════════════════
+  function generateSnapshot(sd) {
+    if (sd.snapshot?.element?.length > 1) return sd.snapshot.element;
+    const baseType = sd.type || sd.name;
+    const baseDef = baseDefinitions[baseType] || baseDefinitions[sd.baseDefinition];
+    if (!baseDef || !baseDef.elements.length) {
+      return sd.differential?.element || sd.snapshot?.element || [];
+    }
+    const baseElements = JSON.parse(JSON.stringify(baseDef.elements));
+    const diffMap = {};
+    if (sd.differential?.element) {
+      for (const el of sd.differential.element) { if (el.path) diffMap[el.path] = el; }
+    }
+    const mergedElements = [];
+    const processedDiffPaths = new Set();
+    for (const baseEl of baseElements) {
+      const diffEl = diffMap[baseEl.path];
+      if (diffEl) {
+        const merged = { ...baseEl };
+        for (const [key, value] of Object.entries(diffEl)) {
+          if (key === 'id') continue;
+          merged[key] = value;
+        }
+        mergedElements.push(merged);
+        processedDiffPaths.add(baseEl.path);
+      } else {
+        mergedElements.push(baseEl);
+      }
+    }
+    if (sd.differential?.element) {
+      for (const diffEl of sd.differential.element) {
+        if (!processedDiffPaths.has(diffEl.path)) {
+          const parentPath = diffEl.path.split('.').slice(0, -1).join('.');
+          let insertIdx = mergedElements.length;
+          for (let i = mergedElements.length - 1; i >= 0; i--) {
+            if (mergedElements[i].path === parentPath || mergedElements[i].path.startsWith(parentPath + '.')) {
+              insertIdx = i + 1;
+              while (insertIdx < mergedElements.length && mergedElements[insertIdx].path.startsWith(parentPath + '.')) insertIdx++;
+              break;
+            }
+          }
+          mergedElements.splice(insertIdx, 0, diffEl);
+        }
+      }
+    }
+    return mergedElements;
+  }
+
+  // ═══════════════════════════════════════════
+  //  PACKAGE LOADING
+  // ═══════════════════════════════════════════
+  loadPkgBtn.addEventListener('click', () => pkgInput.click());
+
+  pkgInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const overlay = showOverlay('Reading package…');
+    try {
+      let jsonFiles = {};
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.tgz') || name.endsWith('.tar.gz')) {
+        overlay.querySelector('.loading-text').textContent = 'Decompressing .tgz…';
+        const arrayBuf = await file.arrayBuffer();
+        const decompressed = pako.inflate(new Uint8Array(arrayBuf));
+        overlay.querySelector('.loading-text').textContent = 'Parsing tar archive…';
+        jsonFiles = parseTar(decompressed.buffer);
+      } else if (name.endsWith('.zip')) {
+        overlay.querySelector('.loading-text').textContent = 'Extracting ZIP…';
+        const zip = await JSZip.loadAsync(file);
+        for (const [fn, entry] of Object.entries(zip.files)) {
+          if (!entry.dir && fn.toLowerCase().endsWith('.json')) {
+            jsonFiles[fn] = await entry.async('string');
+          }
+        }
+      } else {
+        throw new Error('Unsupported format. Use .zip or .tgz');
+      }
+      overlay.querySelector('.loading-text').textContent = 'Processing resources…';
+      processPackage(jsonFiles);
+      overlay.remove();
+      const exCount = Object.values(examples).reduce((s, a) => s + a.length, 0);
+      showToast(`Package loaded — ${Object.keys(profileIndex).length} profiles, ${exCount} examples ✓`);
+    } catch (err) {
+      overlay.remove();
+      statusMsg.textContent = `Error: ${err.message}`;
+      console.error(err);
+    }
+    pkgInput.value = '';
+  });
+
+  function showOverlay(text) {
+    const o = document.createElement('div'); o.className = 'loading-overlay';
+    o.innerHTML = `<div class="spinner"></div><div class="loading-text">${text}</div>`;
+    mainArea.appendChild(o); return o;
+  }
+
+  // ═══════════════════════════════════════════
+  //  PROCESS PACKAGE
+  // ═══════════════════════════════════════════
+  function processPackage(jsonFiles) {
+    pkgMeta = null;
+    allResources = {};
+    categories = { 'Profiles': [], 'Extensions': [], 'ValueSets': [], 'CodeSystems': [], 'Other': [] };
+    profileIndex = {};
+    valueSets = {};
+    codeSystems = {};
+    examples = {};
+    profileExamples = {};
+
+    // First pass: collect all resources
+    const allParsed = [];
+    for (const [fn, content] of Object.entries(jsonFiles)) {
+      if (!fn.endsWith('.json')) continue;
+      try {
+        const data = JSON.parse(content);
+        if (fn.endsWith('package.json') || fn.endsWith('/package.json')) {
+          if (data.name) { pkgMeta = data; continue; }
+        }
+        if (!data.resourceType) continue;
+        allParsed.push({ fn, data });
+      } catch { /* skip */ }
+    }
+
+    // Second pass: index definitions first
+    for (const { fn, data } of allParsed) {
+      if (data.resourceType === 'Bundle' && data.entry) {
+        for (const entry of data.entry) { if (entry.resource) indexResource(entry.resource, fn); }
+      } else {
+        indexResource(data, fn);
+      }
+    }
+
+    // Build profile index
+    for (const res of [...categories['Profiles'], ...categories['Extensions']]) {
+      const name = res.name || res.id;
+      const elements = generateSnapshot(res);
+      const diffElements = res.differential?.element || [];
+      const elementsByPath = {};
+      const diffPaths = new Set();
+      for (const el of elements) { if (el.path) elementsByPath[el.path] = el; }
+      for (const el of diffElements) { if (el.path) diffPaths.add(el.path); }
+      profileIndex[name] = { sd: res, elements, elementsByPath, diffPaths };
+      if (res.url) profileIndex[res.url] = profileIndex[name];
+    }
+
+    showPackageUI();
+  }
+
+  function indexResource(res, filename) {
+    const key = res.url || res.id || `${res.resourceType}/${res.name || Math.random()}`;
+    allResources[key] = res;
+
+    // Detect if this is an example
+    const fnLower = (filename || '').toLowerCase();
+    const idLower = (res.id || '').toLowerCase();
+    const isExample = fnLower.includes('example') || fnLower.includes('exemple') ||
+                      idLower.includes('example') || idLower.includes('exemple') ||
+                      fnLower.includes('/example/') || fnLower.includes('/exemple/') ||
+                      fnLower.includes('/examples/') || fnLower.includes('/exemples/') ;
+
+    if (isExample && res.resourceType !== 'StructureDefinition' &&
+        res.resourceType !== 'ValueSet' && res.resourceType !== 'CodeSystem' &&
+        res.resourceType !== 'ImplementationGuide' && res.resourceType !== 'SearchParameter' &&
+        res.resourceType !== 'CapabilityStatement' && res.resourceType !== 'OperationDefinition') {
+
+      const exName = res.id || fnLower.split('/').pop().replace('.json', '');
+      const exEntry = { name: exName, resource: res, filename: filename };
+
+      // Index by resourceType
+      if (!examples[res.resourceType]) examples[res.resourceType] = [];
+      examples[res.resourceType].push(exEntry);
+
+      // Index by meta.profile
+      if (res.meta?.profile) {
+        for (const profileUrl of res.meta.profile) {
+          if (!profileExamples[profileUrl]) profileExamples[profileUrl] = [];
+          profileExamples[profileUrl].push(exEntry);
+        }
+      }
+      return;
+    }
+
+    switch (res.resourceType) {
+      case 'StructureDefinition':
+        if (res.type === 'Extension') categories['Extensions'].push(res);
+        else if (res.derivation === 'constraint' || res.kind === 'resource') categories['Profiles'].push(res);
+        else categories['Other'].push(res);
+        break;
+      case 'ValueSet':
+        categories['ValueSets'].push(res);
+        if (res.url) valueSets[res.url] = res;
+        break;
+      case 'CodeSystem':
+        categories['CodeSystems'].push(res);
+        if (res.url) codeSystems[res.url] = res;
+        break;
+      default:
+        categories['Other'].push(res);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  //  GET EXAMPLES FOR A PROFILE
+  // ═══════════════════════════════════════════
+  function getExamplesForProfile(profileName) {
+    const pi = profileIndex[profileName];
+    if (!pi) return [];
+
+    const result = [];
+    const seen = new Set();
+
+    // Match by profile URL in meta.profile
+    const url = pi.sd.url;
+    if (url && profileExamples[url]) {
+      for (const ex of profileExamples[url]) {
+        const k = ex.name + JSON.stringify(ex.resource).slice(0, 100);
+        if (!seen.has(k)) { seen.add(k); result.push(ex); }
+      }
+    }
+
+    // Match by resource type
+    const resType = pi.sd.type;
+    if (resType && examples[resType]) {
+      for (const ex of examples[resType]) {
+        const k = ex.name + JSON.stringify(ex.resource).slice(0, 100);
+        if (!seen.has(k)) { seen.add(k); result.push(ex); }
+      }
+    }
+
+    return result;
+  }
+
+  // ═══════════════════════════════════════════
+  //  SHOW PACKAGE UI
+  // ═══════════════════════════════════════════
+  function showPackageUI() {
+    let barHtml = '';
+    if (pkgMeta) {
+      barHtml += `<strong>${pkgMeta.name || 'Unknown'}</strong>`;
+      if (pkgMeta.version) barHtml += ` <span class="pkg-badge">v${pkgMeta.version}</span>`;
+      const fv = pkgMeta.fhirVersion || pkgMeta['fhir-version-list'];
+      if (fv) barHtml += ` <span style="color:var(--text-muted);">FHIR ${Array.isArray(fv) ? fv.join(', ') : fv}</span>`;
+      barHtml += ' — ';
+    }
+    const counts = [];
+    if (categories['Profiles'].length) counts.push(`<span class="pkg-stat">📋 ${categories['Profiles'].length} profiles</span>`);
+    if (categories['Extensions'].length) counts.push(`<span class="pkg-stat">🔧 ${categories['Extensions'].length} extensions</span>`);
+    if (categories['ValueSets'].length) counts.push(`<span class="pkg-stat">📖 ${categories['ValueSets'].length} value sets</span>`);
+    if (categories['CodeSystems'].length) counts.push(`<span class="pkg-stat">🏷️ ${categories['CodeSystems'].length} code systems</span>`);
+    const exCount = Object.values(examples).reduce((s, a) => s + a.length, 0);
+    if (exCount) counts.push(`<span class="pkg-stat">📄 ${exCount} examples</span>`);
+    if (categories['Other'].length) counts.push(`<span class="pkg-stat">📦 ${categories['Other'].length} other</span>`);
+    barHtml += counts.join(' ');
+    pkgInfoBar.innerHTML = barHtml;
+    pkgInfoBar.classList.add('visible');
+
+    searchInput.disabled = false;
+    searchInput.placeholder = 'Search profiles, extensions, value sets…';
+    searchInput.value = ''; searchInput.focus();
+    clearBtnHdr.style.display = 'inline-block';
+    treeRoot.innerHTML = ''; treeRoot.style.display = 'none'; closeDetail();
+
+    instructions.innerHTML = `
+      <div style="font-size:48px;margin-bottom:12px;">🌳</div>
+      <div><strong>Select a profile</strong> to explore its structure.</div>
+      <div style="margin-top:6px;font-size:13px;">Search above to find profiles, extensions, or value sets.</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">
+        🟡 Yellow = constrained by this profile&nbsp;&nbsp;
+        <span style="color:var(--must-support);font-weight:700;">MS</span> = Must Support&nbsp;&nbsp;
+        📄 = Examples available
+      </div>`;
+    treeEmpty.style.display = 'flex';
+    statusMsg.textContent = '';
+  }
+
+  // ═══════════════════════════════════════════
+  //  RESET
+  // ═══════════════════════════════════════════
+  clearBtnHdr.addEventListener('click', () => {
+    pkgMeta = null; allResources = {}; categories = {}; profileIndex = {};
+    valueSets = {}; codeSystems = {}; examples = {}; profileExamples = {};
+    selectedNode = null;
+    treeRoot.innerHTML = ''; treeRoot.style.display = 'none'; closeDetail();
+    searchInput.disabled = true; searchInput.value = '';
+    searchInput.placeholder = 'Load a package to begin…';
+    clearBtnHdr.style.display = 'none'; pkgInfoBar.classList.remove('visible');
+    statusMsg.textContent = baseLoaded ? 'Base loaded. Load a profile package →' : '';
+    instructions.innerHTML = `
+      <div style="font-size:48px;margin-bottom:12px;">📦</div>
+      <div><strong>Load a profile package</strong> to explore.</div>`;
+    treeEmpty.style.display = 'flex';
+    showToast('Package reset (base definitions kept)');
+  });
+
+  // ═══════════════════════════════════════════
+  //  ELEMENT HELPERS
+  // ═══════════════════════════════════════════
+  function getChildElements(profileName, parentPath) {
+    const pi = profileIndex[profileName];
+    if (!pi) return [];
+    const prefix = parentPath + '.';
+    const children = []; const seen = new Set();
+    for (const el of pi.elements) {
+      if (!el.path.startsWith(prefix)) continue;
+      const rem = el.path.slice(prefix.length);
+      if (rem.includes('.')) continue;
+      if (seen.has(el.path)) continue;
+      seen.add(el.path); children.push(el);
+    }
+    return children;
+  }
+
+  function getElementName(el) { return el.path.split('.').pop(); }
+  function isDiffElement(profileName, path) { return profileIndex[profileName]?.diffPaths?.has(path) || false; }
+
+  function getElementTypeBadge(el) {
+    const types = el.type || [];
+    if (!types.length) {
+      const rootType = el.path.split('.')[0];
+      if (getChildElements(rootType, el.path).length > 0) return { cls: 'backbone', label: '{}' };
+      return { cls: 'obj', label: '{}' };
+    }
+    const c = types[0].code;
+    if (c === 'Extension') return { cls: 'ext', label: 'Ex' };
+    if (c === 'Reference') return { cls: 'ref', label: '→' };
+    if (c === 'CodeableConcept' || c === 'Coding' || c === 'code') return { cls: 'enum', label: 'C' };
+    if (PRIMITIVES.has(c)) {
+      if (c === 'boolean') return { cls: 'bool', label: 'B' };
+      if (['integer','decimal','positiveInt','unsignedInt','integer64'].includes(c)) return { cls: 'num', label: '#' };
+      return { cls: 'str', label: 'S' };
+    }
+    if (c === 'BackboneElement' || c === 'Element') return { cls: 'backbone', label: '{}' };
+    if (el.max === '*') return { cls: 'arr', label: '[]' };
+    return { cls: 'obj', label: '{}' };
+  }
+
+  function getElementTypeLabel(el) {
+    const types = el.type || [];
+    if (!types.length) return 'BackboneElement';
+    if (types.length === 1) return types[0].code;
+    return types.map(t => t.code).join(' | ');
+  }
+
+  function getBindingColor(s) {
+    switch ((s || '').toLowerCase()) {
+      case 'required': return 'var(--binding-required)';
+      case 'extensible': return 'var(--binding-extensible)';
+      case 'preferred': return 'var(--binding-preferred)';
+      case 'example': return 'var(--binding-example)';
+      default: return 'var(--text-muted)';
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  //  SEARCH / DROPDOWN
+  // ═══════════════════════════════════════════
+  let dropdownIndex = -1;
+
+  function renderDropdown(filter) {
+    const f = filter.toLowerCase();
+    const groups = [
+      { label: 'Profiles', icon: '📋', items: categories['Profiles'] || [] },
+      { label: 'Extensions', icon: '🔧', items: categories['Extensions'] || [] },
+      { label: 'ValueSets', icon: '📖', items: categories['ValueSets'] || [] },
+      { label: 'CodeSystems', icon: '🏷️', items: categories['CodeSystems'] || [] },
+    ];
+    let html = ''; let totalItems = 0;
+    for (const group of groups) {
+      const matched = group.items.filter(r => {
+        const n = (r.name || r.id || '').toLowerCase();
+        const t = (r.title || '').toLowerCase();
+        const u = (r.url || '').toLowerCase();
+        return n.includes(f) || t.includes(f) || u.includes(f);
+      });
+      if (!matched.length) continue;
+      html += `<div class="dropdown-group-label">${group.icon} ${group.label} (${matched.length})</div>`;
+      matched.slice(0, 30).forEach(r => {
+        const n = r.name || r.id || 'Unnamed';
+        const t = r.title || r.description || '';
+        const short = t.length > 80 ? t.slice(0, 80) + '…' : t;
+        // Check for examples
+        const hasEx = r.resourceType === 'StructureDefinition' && getExamplesForProfile(n).length > 0;
+        html += `<div class="dropdown-item" data-rt="${r.resourceType}" data-name="${n}" data-url="${r.url || ''}">
+          ${hlText(n, f)}${hasEx ? ' <span style="font-size:11px;">📄</span>' : ''}
+          ${short ? `<span class="item-desc">${short}</span>` : ''}
+          ${r.url ? `<span class="item-url">${r.url}</span>` : ''}</div>`;
+        totalItems++;
+      });
+      if (matched.length > 30) html += `<div class="dropdown-item" style="color:var(--text-muted);cursor:default;font-style:italic;">… and ${matched.length - 30} more</div>`;
+    }
+    if (!totalItems) { dropdown.classList.remove('open'); return; }
+    dropdown.innerHTML = html; dropdown.classList.add('open'); dropdownIndex = -1;
+    dropdown.querySelectorAll('.dropdown-item[data-name]').forEach(el => {
+      el.addEventListener('click', () => {
+        const rt = el.dataset.rt, n = el.dataset.name, u = el.dataset.url;
+        if (rt === 'StructureDefinition') selectProfile(n);
+        else if (rt === 'ValueSet') openValueSetModal(u || n);
+        else if (rt === 'CodeSystem') openCodeSystemModal(u || n);
+      });
+    });
+  }
+
+  function hlText(t, q) {
+    if (!q) return t;
+    const i = t.toLowerCase().indexOf(q);
+    if (i < 0) return t;
+    return t.slice(0, i) + '<strong>' + t.slice(i, i + q.length) + '</strong>' + t.slice(i + q.length);
+  }
+
+  searchInput.addEventListener('input', () => { clearBtn.classList.toggle('visible', searchInput.value.trim().length > 0); renderDropdown(searchInput.value.trim()); });
+  searchInput.addEventListener('focus', () => { if (categories['Profiles']) renderDropdown(searchInput.value.trim()); });
+  clearBtn.addEventListener('click', () => { searchInput.value = ''; clearBtn.classList.remove('visible'); dropdown.classList.remove('open'); searchInput.focus(); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) dropdown.classList.remove('open'); });
+  searchInput.addEventListener('keydown', (e) => {
+    const items = dropdown.querySelectorAll('.dropdown-item[data-name]');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); dropdownIndex = Math.min(dropdownIndex + 1, items.length - 1); updateDDHL(items); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); dropdownIndex = Math.max(dropdownIndex - 1, 0); updateDDHL(items); }
+    else if (e.key === 'Enter' && dropdownIndex >= 0) { e.preventDefault(); items[dropdownIndex].click(); }
+    else if (e.key === 'Escape') { dropdown.classList.remove('open'); }
+  });
+  function updateDDHL(items) {
+    items.forEach((el, i) => el.classList.toggle('active', i === dropdownIndex));
+    if (items[dropdownIndex]) items[dropdownIndex].scrollIntoView({ block: 'nearest' });
+  }
+
+  // ═══════════════════════════════════════════
+  //  TREE RENDERING
+  // ═══════════════════════════════════════════
+  function selectProfile(name) {
+    dropdown.classList.remove('open');
+    searchInput.value = name; clearBtn.classList.add('visible');
+    const pi = profileIndex[name];
+    if (!pi) { showToast(`Profile "${name}" not found`); return; }
+
+    treeEmpty.style.display = 'none'; treeRoot.style.display = 'block';
+    treeRoot.innerHTML = ''; closeDetail();
+
+    // Profile header
+    const desc = document.createElement('div');
+    desc.style.cssText = 'margin-bottom:12px;padding:10px 14px;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius);';
+    if (pi.sd.title) { const t = document.createElement('div'); t.style.cssText = 'font-weight:600;font-size:15px;margin-bottom:4px;'; t.textContent = pi.sd.title; desc.appendChild(t); }
+    if (pi.sd.description) { const d = document.createElement('div'); d.style.cssText = 'font-size:13px;color:var(--text-muted);line-height:1.5;'; d.textContent = pi.sd.description; desc.appendChild(d); }
+    if (pi.sd.url) { const u = document.createElement('div'); u.style.cssText = 'font-size:11px;color:var(--accent-ref);margin-top:4px;font-family:monospace;'; u.textContent = pi.sd.url; desc.appendChild(u); }
+
+    const infoRow = document.createElement('div');
+    infoRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;';
+    const info = document.createElement('span');
+    info.style.cssText = 'font-size:11px;color:var(--text-muted);';
+    info.textContent = `${pi.elements.length} elements (${pi.diffPaths.size} constrained)`;
+    infoRow.appendChild(info);
+
+    // Examples button
+    const exList = getExamplesForProfile(name);
+    if (exList.length) {
+      const exBtn = document.createElement('button');
+      exBtn.className = 'example-badge';
+      exBtn.textContent = `📄 ${exList.length} example${exList.length !== 1 ? 's' : ''}`;
+      exBtn.addEventListener('click', () => openExampleModal(name, exList));
+      infoRow.appendChild(exBtn);
+    }
+
+    desc.appendChild(infoRow);
+    treeRoot.appendChild(desc);
+
+    const rootPath = pi.sd.type || name;
+    const rootEl = pi.elementsByPath[rootPath] || null;
+    const rootNode = createTreeNode(name, rootPath, rootEl, true);
+    treeRoot.appendChild(rootNode);
+
+    const tog = rootNode.querySelector('.toggle-icon');
+    if (tog && !tog.classList.contains('leaf')) {
+      expandNode(rootNode, name, rootPath);
+      tog.classList.add('expanded');
+    }
+  }
+
+  function createTreeNode(profileName, fhirPath, element, isRoot) {
+    const node = document.createElement('div'); node.className = 'tree-node';
+    const row = document.createElement('div'); row.className = 'node-row';
+
+    const elName = isRoot ? (profileIndex[profileName]?.sd?.type || profileName) : getElementName(element);
+    const children = getChildElements(profileName, fhirPath);
+    const canExpand = children.length > 0;
+    const badge = element ? getElementTypeBadge(element) : { cls: 'obj', label: '{}' };
+    const typeLabel = element ? getElementTypeLabel(element) : '';
+    const card = element && !isRoot ? `${element.min ?? 0}..${element.max ?? '*'}` : '';
+    const isReq = element && parseInt(element.min) > 0;
+    const hasBinding = !!element?.binding;
+    const isMS = !!element?.mustSupport;
+    const isDiff = isDiffElement(profileName, fhirPath);
+
+    if (isDiff && !isRoot) row.classList.add('diff-highlight');
+
+    const tog = document.createElement('span');
+    tog.className = 'toggle-icon' + (canExpand ? '' : ' leaf');
+    tog.textContent = '▶'; row.appendChild(tog);
+
+    if (isReq && !isRoot) { const d = document.createElement('span'); d.className = 'required-dot'; d.title = 'Required'; row.appendChild(d); }
+    if (isMS) { const ms = document.createElement('span'); ms.className = 'ms-flag'; ms.textContent = 'MS'; ms.title = 'Must Support'; row.appendChild(ms); }
+    if (hasBinding) { const bd = document.createElement('span'); bd.className = 'node-binding-dot'; bd.style.background = getBindingColor(element.binding.strength); bd.title = `Binding: ${element.binding.strength || '?'}`; row.appendChild(bd); }
+
+    const b = document.createElement('span'); b.className = `type-badge ${badge.cls}`; b.textContent = badge.label; row.appendChild(b);
+    const nm = document.createElement('span'); nm.className = 'node-name'; nm.textContent = elName; row.appendChild(nm);
+
+    if (!isRoot && typeLabel) { const tl = document.createElement('span'); tl.className = 'node-type-label'; tl.textContent = typeLabel; row.appendChild(tl); }
+    if (card) { const c = document.createElement('span'); c.className = 'node-cardinality'; c.textContent = card; row.appendChild(c); }
+    if (element?.sliceName) { const st = document.createElement('span'); st.className = 'slice-tag'; st.textContent = `slice: ${element.sliceName}`; row.appendChild(st); }
+    if (element?.slicing) { const st = document.createElement('span'); st.className = 'slice-tag'; st.textContent = '✂ sliced'; row.appendChild(st); }
+    if (element?.short && !isRoot) { const sd = document.createElement('span'); sd.className = 'node-short'; sd.textContent = element.short; row.appendChild(sd); }
+
+    const actions = document.createElement('span'); actions.className = 'node-actions';
+    const infoBtn = document.createElement('button'); infoBtn.textContent = 'ℹ️ Info';
+    infoBtn.addEventListener('click', (e) => { e.stopPropagation(); showDetail(profileName, fhirPath, element, isRoot); highlightRow(row); });
+    actions.appendChild(infoBtn);
+    const pathBtn = document.createElement('button'); pathBtn.textContent = '📋 Path';
+    pathBtn.addEventListener('click', (e) => { e.stopPropagation(); copyToClipboard(fhirPath); });
+    actions.appendChild(pathBtn); row.appendChild(actions);
+
+    row.addEventListener('click', () => {
+      if (canExpand) {
+        const ch = node.querySelector(':scope > .tree-children');
+        if (ch) { ch.remove(); tog.classList.remove('expanded'); }
+        else { expandNode(node, profileName, fhirPath); tog.classList.add('expanded'); }
+      }
+      showDetail(profileName, fhirPath, element, isRoot); highlightRow(row);
+    });
+
+    node.appendChild(row); return node;
+  }
+
+  function expandNode(nodeEl, profileName, parentPath) {
+    const children = getChildElements(profileName, parentPath);
+    if (!children.length) return;
+    const container = document.createElement('div'); container.className = 'tree-children';
+    children.sort((a, b) => {
+      const aDiff = isDiffElement(profileName, a.path) ? 0 : 1;
+      const bDiff = isDiffElement(profileName, b.path) ? 0 : 1;
+      if (aDiff !== bDiff) return aDiff - bDiff;
+      return getElementName(a).localeCompare(getElementName(b));
+    });
+    for (const ch of children) container.appendChild(createTreeNode(profileName, ch.path, ch, false));
+    nodeEl.appendChild(container);
+  }
+
+  function highlightRow(row) {
+    if (selectedNode) selectedNode.classList.remove('selected');
+    row.classList.add('selected'); selectedNode = row;
+  }
+
+  // ═══════════════════════════════════════════
+  //  DETAIL PANEL
+  // ═══════════════════════════════════════════
+  function showDetail(profileName, fhirPath, element, isRoot) {
+    const elName = isRoot ? (profileIndex[profileName]?.sd?.type || profileName) : getElementName(element);
+    detailTitle.textContent = elName;
+    detailBody.innerHTML = '';
+    const isDiff = isDiffElement(profileName, fhirPath);
+
+    if (isDiff && !isRoot) {
+      const tag = document.createElement('div'); tag.style.marginBottom = '12px';
+      const badge = document.createElement('span'); badge.className = 'diff-tag';
+      badge.textContent = '⚡ Constrained by this profile';
+      tag.appendChild(badge); detailBody.appendChild(tag);
+    }
+
+    addSection(detailBody, 'FHIR Path', () => {
+      const row = document.createElement('div'); row.className = 'path-copy-row';
+      const code = document.createElement('code'); code.textContent = fhirPath; row.appendChild(code);
+      const btn = document.createElement('button'); btn.textContent = 'Copy';
+      btn.addEventListener('click', () => copyToClipboard(fhirPath)); row.appendChild(btn);
+      return row;
+    });
+
+    if (!element) { detailPanel.classList.add('open'); return; }
+
+    if (element.mustSupport) {
+      addSection(detailBody, 'Must Support', () => {
+        const s = document.createElement('span');
+        s.style.cssText = 'color:var(--must-support);font-weight:700;font-size:14px;';
+        s.textContent = '✓ Yes — implementers MUST support this element'; return s;
+      });
+    }
+
+    if (element.short) addSection(detailBody, 'Short', () => makeValue(element.short));
+    if (element.definition) addSection(detailBody, 'Definition', () => makeValue(element.definition));
+    if (element.sliceName) addSection(detailBody, 'Slice Name', () => makeValue(element.sliceName));
+    if (element.slicing) {
+      addSection(detailBody, 'Slicing', () => {
+        const div = document.createElement('div'); div.className = 'value';
+        let text = `Rules: ${element.slicing.rules || 'open'}`;
+        if (element.slicing.discriminator?.length) text += `\nDiscriminators: ${element.slicing.discriminator.map(d => `${d.type}@${d.path}`).join(', ')}`;
+        div.textContent = text; div.style.whiteSpace = 'pre-wrap'; return div;
+      });
+    }
+
+    if (element.type?.length) {
+      addSection(detailBody, 'Type(s)', () => {
+        const div = document.createElement('div'); div.className = 'type-list';
+        for (const t of element.type) {
+          const entry = document.createElement('div'); entry.className = 'type-entry';
+          const codeSpan = document.createElement('span');
+          const canClick = isComplexType(t.code) && (profileIndex[t.code] || baseDefinitions[t.code]);
+          codeSpan.className = 'type-code' + (canClick ? '' : ' primitive');
+          codeSpan.textContent = t.code;
+          if (canClick) {
+            codeSpan.title = `Click to explore ${t.code}`;
+            codeSpan.addEventListener('click', (e) => { e.stopPropagation(); openTypeModal(t.code); });
+          }
+          entry.appendChild(codeSpan);
+          const profiles = t.targetProfile || t.profile || [];
+          if (profiles.length) {
+            const ps = document.createElement('span'); ps.className = 'type-profiles';
+            ps.textContent = '(' + profiles.map(p => p.split('/').pop()).join(', ') + ')';
+            entry.appendChild(ps);
+          }
+          div.appendChild(entry);
+        }
+        return div;
+      });
+    }
+
+    if (!isRoot) {
+      addSection(detailBody, 'Cardinality', () => {
+        const min = element.min ?? 0, max = element.max ?? '*';
+        return makeValue(`${min}..${max}` + (min > 0 ? ' (required)' : ' (optional)'));
+      });
+    }
+
+    if (element.binding) {
+      addSection(detailBody, 'Binding', () => {
+        const div = document.createElement('div');
+        const strength = element.binding.strength || 'unknown';
+        const badge = document.createElement('span'); badge.className = `binding-badge ${strength.toLowerCase()}`; badge.textContent = strength; div.appendChild(badge);
+        if (element.binding.description) { const d = document.createElement('span'); d.className = 'value'; d.textContent = ' ' + element.binding.description; div.appendChild(d); }
+        const vsUrl = element.binding.valueSet;
+        if (vsUrl) {
+          const clean = vsUrl.split('|')[0];
+          const localVS = valueSets[clean] || valueSets[vsUrl];
+          const p = document.createElement('div'); p.style.marginTop = '6px';
+          if (localVS) {
+            const link = document.createElement('a'); link.className = 'detail-link';
+            link.textContent = `📖 ${localVS.title || localVS.name || clean.split('/').pop()} (view codes)`;
+            link.href = '#'; link.addEventListener('click', (e) => { e.preventDefault(); openValueSetModal(clean); });
+            p.appendChild(link);
+          } else {
+            const link = document.createElement('a'); link.className = 'detail-link';
+            link.textContent = `📖 ${clean.split('/').pop()}`; link.href = clean; link.target = '_blank'; p.appendChild(link);
+          }
+          div.appendChild(p);
+        }
+        return div;
+      });
+    }
+
+    if (element.comment) addSection(detailBody, 'Comments', () => makeValue(element.comment));
+    if (element.requirements) addSection(detailBody, 'Requirements', () => makeValue(element.requirements));
+    if (element.alias?.length) {
+      addSection(detailBody, 'Aliases', () => {
+        const div = document.createElement('div'); div.className = 'enum-list';
+        element.alias.forEach(a => { const s = document.createElement('span'); s.textContent = a; div.appendChild(s); });
+        return div;
+      });
+    }
+
+    for (const key of Object.keys(element)) {
+      if (key.startsWith('fixed') || key.startsWith('pattern') || key.startsWith('defaultValue')) {
+        addSection(detailBody, key, () => {
+          const code = document.createElement('code');
+          code.style.cssText = 'background:var(--bg);padding:4px 8px;border-radius:4px;font-size:12px;display:block;word-break:break-all;white-space:pre-wrap;';
+          code.textContent = typeof element[key] === 'object' ? JSON.stringify(element[key], null, 2) : String(element[key]);
+          return code;
+        });
+      }
+    }
+
+    if (element.constraint?.length) {
+      addSection(detailBody, 'Constraints', () => {
+        const div = document.createElement('div'); div.className = 'constraint-list';
+        for (const c of element.constraint) {
+          const item = document.createElement('div'); item.className = 'constraint-item';
+          const key = document.createElement('span'); key.className = 'constraint-key'; key.textContent = c.key || ''; item.appendChild(key);
+          if (c.severity) { const sev = document.createElement('span'); sev.className = `constraint-severity ${c.severity}`; sev.textContent = c.severity; item.appendChild(sev); }
+          item.appendChild(document.createTextNode(c.human || c.expression || ''));
+          div.appendChild(item);
+        }
+        return div;
+      });
+    }
+
+    if (element.mapping?.length) {
+      addSection(detailBody, 'Mappings', () => {
+        const div = document.createElement('div'); div.className = 'constraint-list';
+        for (const m of element.mapping) {
+          const item = document.createElement('div'); item.className = 'constraint-item';
+          const id = document.createElement('span'); id.className = 'constraint-key'; id.textContent = m.identity || ''; item.appendChild(id);
+          item.appendChild(document.createTextNode(m.map || ''));
+          div.appendChild(item);
+        }
+        return div;
+      });
+    }
+
+    if (element.isModifier) addSection(detailBody, 'Is Modifier', () => makeValue('Yes' + (element.isModifierReason ? ` — ${element.isModifierReason}` : '')));
+    if (element.isSummary) addSection(detailBody, 'Is Summary', () => makeValue('Yes'));
+
+    const children = getChildElements(profileName, fhirPath);
+    if (children.length) addSection(detailBody, 'Child Elements', () => makeValue(`${children.length} elements`));
+
+    // Examples button in detail panel
+    const exList = getExamplesForProfile(profileName);
+    if (exList.length) {
+      addSection(detailBody, 'Examples', () => {
+        const btn = document.createElement('button'); btn.className = 'example-badge';
+        btn.textContent = `📄 View ${exList.length} example${exList.length !== 1 ? 's' : ''}`;
+        btn.addEventListener('click', () => openExampleModal(profileName, exList));
+        return btn;
+      });
+    }
+
+    if (profileIndex[profileName]?.sd?.url) {
+      addSection(detailBody, 'Profile URL', () => {
+        const code = document.createElement('code');
+        code.style.cssText = 'background:var(--bg);padding:4px 8px;border-radius:4px;font-size:11px;display:block;word-break:break-all;font-family:monospace;';
+        code.textContent = profileIndex[profileName].sd.url; return code;
+      });
+    }
+
+    detailPanel.classList.add('open');
+  }
+
+  function addSection(container, label, fn) {
+    const s = document.createElement('div'); s.className = 'detail-section';
+    const l = document.createElement('label'); l.textContent = label;
+    s.appendChild(l); s.appendChild(fn()); container.appendChild(s);
+  }
+  function makeValue(t) { const s = document.createElement('span'); s.className = 'value'; s.textContent = t; return s; }
+  function closeDetail() { detailPanel.classList.remove('open'); if (selectedNode) { selectedNode.classList.remove('selected'); selectedNode = null; } }
+  detailCloseEl.addEventListener('click', closeDetail);
+
+  // ═══════════════════════════════════════════
+  //  EXAMPLE MODAL
+  // ═══════════════════════════════════════════
+  function openExampleModal(profileName, exList) {
+    const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div'); modal.className = 'modal';
+    modal.style.height = '80vh';
+
+    // Header
+    const header = document.createElement('div'); header.className = 'modal-header';
+    const headerLeft = document.createElement('div'); headerLeft.className = 'modal-header-left';
+    const title = document.createElement('h2'); title.textContent = profileName; headerLeft.appendChild(title);
+    const subtitle = document.createElement('span'); subtitle.className = 'modal-subtitle';
+    subtitle.textContent = `${exList.length} example${exList.length !== 1 ? 's' : ''}`;
+    headerLeft.appendChild(subtitle);
+    header.appendChild(headerLeft);
+    const closeBtn = document.createElement('button'); closeBtn.className = 'modal-close'; closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => overlay.remove());
+    header.appendChild(closeBtn); modal.appendChild(header);
+
+    // Tabs (if multiple examples)
+    let tabsEl = null;
+    if (exList.length > 1) {
+      tabsEl = document.createElement('div'); tabsEl.className = 'example-tabs';
+      exList.forEach((ex, i) => {
+        const tab = document.createElement('button'); tab.className = 'example-tab' + (i === 0 ? ' active' : '');
+        tab.textContent = ex.name || `Example ${i + 1}`;
+        tab.dataset.idx = i;
+        tab.addEventListener('click', () => {
+          tabsEl.querySelectorAll('.example-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          renderExample(jsonContainer, toolbarInfo, ex);
+        });
+        tabsEl.appendChild(tab);
+      });
+      modal.appendChild(tabsEl);
+    }
+
+    // Toolbar
+    const toolbar = document.createElement('div'); toolbar.className = 'example-toolbar';
+    const toolbarInfo = document.createElement('span'); toolbarInfo.className = 'example-info';
+    toolbar.appendChild(toolbarInfo);
+    const copyBtn = document.createElement('button'); copyBtn.className = 'hdr-btn secondary';
+    copyBtn.style.cssText = 'padding:4px 10px;font-size:12px;';
+    copyBtn.textContent = '📋 Copy JSON';
+    let currentJson = '';
+    copyBtn.addEventListener('click', () => copyToClipboard(currentJson));
+    toolbar.appendChild(copyBtn);
+    modal.appendChild(toolbar);
+
+    // JSON container
+    const jsonContainer = document.createElement('div'); jsonContainer.className = 'example-json';
+    modal.appendChild(jsonContainer);
+
+    // Render first example
+    function renderExample(container, infoEl, ex) {
+      const json = JSON.stringify(ex.resource, null, 2);
+      currentJson = json;
+      container.innerHTML = syntaxHighlightJson(json);
+      const rt = ex.resource.resourceType || '?';
+      const id = ex.resource.id || 'unknown';
+      const profiles = ex.resource.meta?.profile || [];
+      let infoText = `${rt}/${id}`;
+      if (profiles.length) infoText += ` — profile: ${profiles.map(p => p.split('/').pop()).join(', ')}`;
+      infoEl.textContent = infoText;
+    }
+
+    renderExample(jsonContainer, toolbarInfo, exList[0]);
+
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    const esc = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', esc); } };
+    document.addEventListener('keydown', esc);
+  }
+
+  function syntaxHighlightJson(json) {
+    return json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|\bnull\b)/g, (match) => {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'json-key';
+            // Remove the colon for wrapping, add it back after
+            return `<span class="${cls}">${match.slice(0, -1)}</span>:`;
+          } else {
+            cls = 'json-string';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'json-bool';
+        } else if (/null/.test(match)) {
+          cls = 'json-null';
+        }
+        return `<span class="${cls}">${match}</span>`;
+      });
+  }
+
+  // ═══════════════════════════════════════════
+  //  TYPE MODAL
+  // ═══════════════════════════════════════════
+  function openTypeModal(typeName) {
+    const typeData = profileIndex[typeName] || baseDefinitions[typeName];
+    if (!typeData) { showToast(`Type "${typeName}" not found`); return; }
+
+    const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    const modal = document.createElement('div'); modal.className = 'modal';
+
+    const header = document.createElement('div'); header.className = 'modal-header';
+    const headerLeft = document.createElement('div'); headerLeft.className = 'modal-header-left';
+    const title = document.createElement('h2'); title.textContent = typeName; headerLeft.appendChild(title);
+    const subtitle = document.createElement('span'); subtitle.className = 'modal-subtitle'; subtitle.textContent = 'Data Type'; headerLeft.appendChild(subtitle);
+    header.appendChild(headerLeft);
+    const closeBtn = document.createElement('button'); closeBtn.className = 'modal-close'; closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => overlay.remove());
+    header.appendChild(closeBtn); modal.appendChild(header);
+
+    const body = document.createElement('div'); body.className = 'modal-body';
+    if (typeData.sd?.description) { const d = document.createElement('p'); d.style.cssText = 'font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;'; d.textContent = typeData.sd.description; body.appendChild(d); }
+
+    const rootPath = typeData.sd?.type || typeName;
+    const prefix = rootPath + '.';
+    const childEls = typeData.elements.filter(el => el.path.startsWith(prefix) && !el.path.slice(prefix.length).includes('.'));
+
+    if (!childEls.length) {
+      const empty = document.createElement('div'); empty.style.cssText = 'color:var(--text-muted);padding:20px;text-align:center;';
+      empty.textContent = `${typeName} has no child elements.`; body.appendChild(empty);
+    } else {
+      for (const ch of childEls.sort((a, b) => getElementName(a).localeCompare(getElementName(b)))) body.appendChild(createModalNode(typeData, ch));
+    }
+
+    modal.appendChild(body); overlay.appendChild(modal); document.body.appendChild(overlay);
+    const esc = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', esc); } };
+    document.addEventListener('keydown', esc);
+  }
+
+  function createModalNode(typeData, element) {
+    const node = document.createElement('div'); node.className = 'tree-node';
+    const row = document.createElement('div'); row.className = 'node-row';
+    const elName = getElementName(element);
+    const prefix = element.path + '.';
+    const kids = typeData.elements.filter(el => el.path.startsWith(prefix) && !el.path.slice(prefix.length).includes('.'));
+    const canExpand = kids.length > 0;
+    const badge = getElementTypeBadge(element);
+    const card = `${element.min ?? 0}..${element.max ?? '*'}`;
+
+    const tog = document.createElement('span'); tog.className = 'toggle-icon' + (canExpand ? '' : ' leaf'); tog.textContent = '▶'; row.appendChild(tog);
+    if (parseInt(element.min) > 0) { const d = document.createElement('span'); d.className = 'required-dot'; row.appendChild(d); }
+    if (element.mustSupport) { const ms = document.createElement('span'); ms.className = 'ms-flag'; ms.textContent = 'MS'; row.appendChild(ms); }
+        const b = document.createElement('span'); b.className = `type-badge ${badge.cls}`; b.textContent = badge.label; row.appendChild(b);
+    const nm = document.createElement('span'); nm.className = 'node-name'; nm.textContent = elName; row.appendChild(nm);
+    const tl = document.createElement('span'); tl.className = 'node-type-label'; tl.textContent = getElementTypeLabel(element); row.appendChild(tl);
+    const c = document.createElement('span'); c.className = 'node-cardinality'; c.textContent = card; row.appendChild(c);
+    if (element.short) { const sd = document.createElement('span'); sd.className = 'node-short'; sd.textContent = element.short; row.appendChild(sd); }
+
+    row.addEventListener('click', () => {
+      if (canExpand) {
+        const ch = node.querySelector(':scope > .tree-children');
+        if (ch) { ch.remove(); tog.classList.remove('expanded'); }
+        else {
+          const container = document.createElement('div'); container.className = 'tree-children';
+          for (const kid of kids.sort((a, b) => getElementName(a).localeCompare(getElementName(b)))) {
+            container.appendChild(createModalNode(typeData, kid));
+          }
+          node.appendChild(container); tog.classList.add('expanded');
+        }
+      }
+    });
+
+    node.appendChild(row); return node;
+  }
+
+  // ═══════════════════════════════════════════
+  //  VALUESET MODAL
+  // ═══════════════════════════════════════════
+  function openValueSetModal(urlOrName) {
+    const vs = valueSets[urlOrName] || Object.values(valueSets).find(v => v.name === urlOrName || v.id === urlOrName);
+    if (!vs) { showToast(`ValueSet "${urlOrName}" not found`); return; }
+
+    const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    const modal = document.createElement('div'); modal.className = 'modal';
+
+    const header = document.createElement('div'); header.className = 'modal-header';
+    const headerLeft = document.createElement('div'); headerLeft.className = 'modal-header-left';
+    const title = document.createElement('h2'); title.textContent = vs.title || vs.name || 'ValueSet'; headerLeft.appendChild(title);
+    const subtitle = document.createElement('span'); subtitle.className = 'modal-subtitle'; subtitle.textContent = 'ValueSet'; headerLeft.appendChild(subtitle);
+    header.appendChild(headerLeft);
+    const closeBtn = document.createElement('button'); closeBtn.className = 'modal-close'; closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => overlay.remove());
+    header.appendChild(closeBtn); modal.appendChild(header);
+
+    const body = document.createElement('div'); body.className = 'modal-body';
+    if (vs.description) {
+      const d = document.createElement('p');
+      d.style.cssText = 'font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;';
+      d.textContent = vs.description; body.appendChild(d);
+    }
+    if (vs.url) {
+      const u = document.createElement('div');
+      u.style.cssText = 'font-size:11px;color:var(--accent-ref);margin-bottom:12px;font-family:monospace;';
+      u.textContent = vs.url; body.appendChild(u);
+    }
+
+    const concepts = [];
+    if (vs.expansion?.contains) {
+      for (const c of vs.expansion.contains) {
+        concepts.push({ system: c.system || '', code: c.code || '', display: c.display || '' });
+      }
+    }
+    if (vs.compose?.include) {
+      for (const inc of vs.compose.include) {
+        const sys = inc.system || '';
+        if (inc.concept) {
+          for (const c of inc.concept) {
+            if (!concepts.find(x => x.code === c.code && x.system === sys)) {
+              concepts.push({ system: sys, code: c.code || '', display: c.display || '' });
+            }
+          }
+        } else if (sys) {
+          const cs = codeSystems[sys];
+          if (cs?.concept) {
+            for (const c of cs.concept) collectCSConcepts(c, sys, concepts);
+          } else {
+            concepts.push({ system: sys, code: '(all)', display: `All from ${sys}` });
+          }
+        }
+      }
+    }
+
+    if (concepts.length) {
+      const countDiv = document.createElement('div');
+      countDiv.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:8px;';
+      countDiv.textContent = `${concepts.length} concept${concepts.length !== 1 ? 's' : ''}`;
+      body.appendChild(countDiv);
+
+      const table = document.createElement('table'); table.className = 'vs-concept-table';
+      table.innerHTML = '<thead><tr><th>Code</th><th>Display</th><th>System</th></tr></thead>';
+      const tbody = document.createElement('tbody');
+      for (const c of concepts.slice(0, 200)) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="vs-concept-code">${escHtml(c.code)}</td><td>${escHtml(c.display)}</td><td style="font-size:11px;color:var(--text-muted);font-family:monospace;">${escHtml(c.system)}</td>`;
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody); body.appendChild(table);
+      if (concepts.length > 200) {
+        const more = document.createElement('div');
+        more.style.cssText = 'margin-top:8px;font-size:13px;color:var(--text-muted);font-style:italic;';
+        more.textContent = `… and ${concepts.length - 200} more`;
+        body.appendChild(more);
+      }
+    } else {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:var(--text-muted);padding:20px;text-align:center;';
+      empty.textContent = 'No concepts found (may reference external systems).';
+      body.appendChild(empty);
+    }
+
+    modal.appendChild(body); overlay.appendChild(modal); document.body.appendChild(overlay);
+    const esc = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', esc); } };
+    document.addEventListener('keydown', esc);
+  }
+
+  function collectCSConcepts(concept, system, list) {
+    list.push({ system, code: concept.code || '', display: concept.display || '' });
+    if (concept.concept) {
+      for (const child of concept.concept) collectCSConcepts(child, system, list);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  //  CODESYSTEM MODAL
+  // ═══════════════════════════════════════════
+  function openCodeSystemModal(urlOrName) {
+    const cs = codeSystems[urlOrName] || Object.values(codeSystems).find(c => c.name === urlOrName || c.id === urlOrName);
+    if (!cs) { showToast(`CodeSystem "${urlOrName}" not found`); return; }
+
+    const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    const modal = document.createElement('div'); modal.className = 'modal';
+
+    const header = document.createElement('div'); header.className = 'modal-header';
+    const headerLeft = document.createElement('div'); headerLeft.className = 'modal-header-left';
+    const title = document.createElement('h2'); title.textContent = cs.title || cs.name || 'CodeSystem'; headerLeft.appendChild(title);
+    const subtitle = document.createElement('span'); subtitle.className = 'modal-subtitle'; subtitle.textContent = 'CodeSystem'; headerLeft.appendChild(subtitle);
+    header.appendChild(headerLeft);
+    const closeBtn = document.createElement('button'); closeBtn.className = 'modal-close'; closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => overlay.remove());
+    header.appendChild(closeBtn); modal.appendChild(header);
+
+    const body = document.createElement('div'); body.className = 'modal-body';
+    if (cs.description) {
+      const d = document.createElement('p');
+      d.style.cssText = 'font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;';
+      d.textContent = cs.description; body.appendChild(d);
+    }
+
+    const concepts = [];
+    if (cs.concept) {
+      for (const c of cs.concept) collectCSConcepts(c, cs.url || '', concepts);
+    }
+
+    if (concepts.length) {
+      const countDiv = document.createElement('div');
+      countDiv.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:8px;';
+      countDiv.textContent = `${concepts.length} concept${concepts.length !== 1 ? 's' : ''}`;
+      body.appendChild(countDiv);
+
+      const table = document.createElement('table'); table.className = 'vs-concept-table';
+      table.innerHTML = '<thead><tr><th>Code</th><th>Display</th></tr></thead>';
+      const tbody = document.createElement('tbody');
+      for (const c of concepts.slice(0, 200)) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="vs-concept-code">${escHtml(c.code)}</td><td>${escHtml(c.display)}</td>`;
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody); body.appendChild(table);
+      if (concepts.length > 200) {
+        const more = document.createElement('div');
+        more.style.cssText = 'margin-top:8px;font-size:13px;color:var(--text-muted);font-style:italic;';
+        more.textContent = `… and ${concepts.length - 200} more`;
+        body.appendChild(more);
+      }
+    } else {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:var(--text-muted);padding:20px;text-align:center;';
+      empty.textContent = 'No concepts defined in this CodeSystem.';
+      body.appendChild(empty);
+    }
+
+    modal.appendChild(body); overlay.appendChild(modal); document.body.appendChild(overlay);
+    const esc = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', esc); } };
+    document.addEventListener('keydown', esc);
+  }
+
+  function escHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ═══════════════════════════════════════════
+  //  CLIPBOARD & TOAST
+  // ═══════════════════════════════════════════
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => showToast(`Copied: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`)).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast(`Copied: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`);
+    });
+  }
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), 2000);
+  }
+
+  // ═══════════════════════════════════════════
+  //  INIT
+  // ═══════════════════════════════════════════
+  statusMsg.textContent = '';
+
+})();
+</script>
+
+
+
+
+</body>
+</html>
