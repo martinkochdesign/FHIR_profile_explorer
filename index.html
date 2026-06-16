@@ -360,7 +360,7 @@
 <!-- JSZip for .zip files -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous"></script>
 <!-- pako for .tgz gzip decompression -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js" integrity="sha512-g2TeAWw5GPnX7z0Kn8nFbYfeHcvAu/tx6d6A2HtiamPcFG4MhttuvOorsJoEW3CZZvHCjdFQ40IG3YPSNmjQA==" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 
 
 <script>
@@ -480,14 +480,29 @@
         if (res.type) baseDefinitions[res.type] = baseDefinitions[name];
         count++;
       }
-      baseLoaded = true;
+            baseLoaded = true;
       overlay.remove();
-      loadBaseBtn.textContent = `✅ Base loaded (${count} definitions)`;
+
+      // Detect FHIR version from loaded definitions
+      let detectedVersion = 'Unknown';
+      for (const entry of entries) {
+        const res = entry.resource;
+        if (res?.fhirVersion) {
+          const fv = res.fhirVersion;
+          if (fv.startsWith('4.0')) { detectedVersion = 'R4 (4.0.1)'; break; }
+          if (fv.startsWith('4.3')) { detectedVersion = 'R4B (4.3.0)'; break; }
+          if (fv.startsWith('5.0')) { detectedVersion = 'R5 (5.0.0)'; break; }
+          detectedVersion = `FHIR ${fv}`; break;
+        }
+      }
+
+      loadBaseBtn.textContent = `✅ Base: ${detectedVersion} (${count} defs)`;
       loadBaseBtn.classList.remove('primary');
       loadBaseBtn.classList.add('secondary');
+      loadBaseBtn.title = `Base definitions loaded: ${detectedVersion}, ${count} StructureDefinitions`;
       loadPkgBtn.style.display = 'inline-block';
       statusMsg.textContent = 'Now load your Simplifier package →';
-      showToast(`Base definitions loaded — ${count} definitions ✓`);
+      showToast(`Base loaded: ${detectedVersion} — ${count} definitions ✓`);
     } catch (err) {
       overlay.remove();
       statusMsg.textContent = `Error: ${err.message}`;
